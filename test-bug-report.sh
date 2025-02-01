@@ -17,10 +17,21 @@ JSON_DATA=$(cat <<EOF
 EOF
 )
 
-# Send test bug report
+# Create a temporary directory
+TEMP_DIR=$(mktemp -d)
+JSON_FILE="$TEMP_DIR/bug_report.json"
+
+# Save JSON to the temporary file
+echo "$JSON_DATA" > "$JSON_FILE"
+
+# Send test bug report with attachments using multipart/form-data
 curl -X POST \
-  -H "Content-Type: application/json" \
-  -d "$JSON_DATA" \
-  http://localhost:8787  # Replace with your worker URL when deployed
+  -H "Content-Type: multipart/form-data" \
+  -F "json=@$JSON_FILE;type=application/json" \
+  -F "screenshot=@testimg.png;type=image/png" \
+  "${WORKER_URL:-http://localhost:8787}"
+
+# Clean up temporary directory
+rm -rf "$TEMP_DIR"
 
 echo # Print newline after response
