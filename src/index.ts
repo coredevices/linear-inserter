@@ -16,12 +16,19 @@ interface BugReport {
   attachments?: File[];
 }
 
+const MAX_FILE_SIZE = 9.9 * 1024 * 1024; // 9.9MB in bytes
+
 async function uploadAttachment(apiKey: string, file: File): Promise<string> {
-  console.error('Uploading file:', {
+  console.error('Processing file:', {
     name: file.name,
     type: file.type,
     size: file.size
   });
+
+  // For videos, enforce size limit
+  if (file.type.startsWith('video/') && file.size > MAX_FILE_SIZE) {
+    throw new Error(`Video file ${file.name} is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Please compress to under ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(1)}MB before uploading.`);
+  }
 
   const linearClient = new LinearClient({ apiKey });
   const uploadPayload = await linearClient.fileUpload(file.type, file.name, file.size);
@@ -57,6 +64,17 @@ async function uploadAttachment(apiKey: string, file: File): Promise<string> {
     }
 
     console.error('Upload successful');
+
+    // For images that exceed size limit, return a resized URL
+    if (file.type.startsWith('image/') && file.size > MAX_FILE_SIZE) {
+      // Use Cloudflare Image Resizing to create a resized version
+      const resizedUrl = new URL(assetUrl);
+      resizedUrl.searchParams.set('width', '1920');
+      resizedUrl.searchParams.set('quality', '80');
+      resizedUrl.searchParams.set('format', 'auto');
+      return resizedUrl.toString();
+    }
+
     return assetUrl;
   } catch (e) {
     console.error(e);
