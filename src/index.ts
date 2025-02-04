@@ -309,6 +309,16 @@ export default {
         });
       }
 
+      // Block issues from test lab accounts
+      if (bugReport.email.toLowerCase().endsWith('@cloudtestlabaccounts.com')) {
+        return new Response(JSON.stringify({
+          error: 'Issues from test lab accounts are not forwarded'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
       // Validate environment variables
       if (!env.ASSIGNEE_USERNAME) {
         throw new Error('ASSIGNEE_USERNAME environment variable is not set');
