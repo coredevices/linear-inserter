@@ -230,6 +230,10 @@ async function createLinearIssue(apiKey: string, teamKey: string, assigneeUserna
     throw new Error(`Could not find user with username: ${assigneeUsername}`);
   }
 
+  // Check if the reporter is a Linear user and add as subscriber
+  const reporterUser = users.find(user => user.email.toLowerCase() === bugReport.email.toLowerCase());
+  const subscriberIds = reporterUser ? [reporterUser.id] : [];
+
   console.error('Found assignee:', {
     id: assignee.id,
     name: assignee.name,
@@ -243,7 +247,8 @@ async function createLinearIssue(apiKey: string, teamKey: string, assigneeUserna
     description,
     teamId: team.id,
     stateId: triageState.id,
-    assigneeId: assignee.id
+    assigneeId: assignee.id,
+    subscriberIds
   });
 
   if (!issueCreate.success || !issueCreate.issue) {

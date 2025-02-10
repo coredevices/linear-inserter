@@ -9,7 +9,7 @@ JSON_DATA=$(cat <<EOF
 {
   "bugReportDetails": "App crashed while trying to create a note in Notion after voice command",
   "username": "John Developer",
-  "email": "john.dev@example.com",
+  "email": "john.dev@test.com",
   "timezone": "Europe/London",
   "summary": ${SUMMARY},
   "latestLogs": ${LOGS}
@@ -28,7 +28,7 @@ echo "$JSON_DATA" > "$JSON_FILE"
 curl -X POST \
   -H "Content-Type: multipart/form-data" \
   -F "json=@$JSON_FILE;type=application/json" \
-  -F "screenshot=@testimg.png;type=image/png" \
+  -F "screenshot=@11mb-example.jpg;type=image/jpg" \
   "${WORKER_URL:-http://localhost:8787}"
 
 # Clean up temporary directory
