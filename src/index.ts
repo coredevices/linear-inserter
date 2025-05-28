@@ -33,22 +33,18 @@ const MAX_FILE_SIZE = 9.9 * 1024 * 1024; // 9.9MB in bytes
 const BUILD_ID_REGEX = /Build ID: ([a-z0-9-]+)$/i;
 const GENERATION_REGEX = /^=== Generation: ([0-9]+) ===$/gm;
 
-async function getDictionary(buildId: string): Promise<Map<string, any>> {
+async function getDictionary(bucketConfig: BucketConfig, buildId: string): Promise<Map<string, any>> {
   if (!process.env.LOG_HASH_BUCKET_ENDPOINT || !process.env.LOG_HASH_BUCKET_KEY_ID || !process.env.LOG_HASH_BUCKET_SECRET) {
     throw new Error('Log hash bucket environment variables are not set');
   }
   const s3Client = new S3Client({
-    endpoint: process.env.LOG_HASH_BUCKET_ENDPOINT || '',
+    endpoint: bucketConfig.endpoint,
     credentials: {
-      accessKeyId: process.env.LOG_HASH_BUCKET_KEY_ID || '',
-      secretAccessKey: process.env.LOG_HASH_BUCKET_SECRET || ''
+      accessKeyId: bucketConfig.keyId,
+      secretAccessKey: bucketConfig.secret
     }
   });
-  const bucketName = process.env.LOG_HASH_BUCKET_NAME;
-  if (!bucketName) {
-    throw new Error('LOG_HASH_BUCKET_NAME environment variable is not set');
-  }
-
+  const bucketName = bucketConfig.bucketName;
   const listCommand = new ListObjectsV2Command({
     Bucket: bucketName
   });
