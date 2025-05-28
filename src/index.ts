@@ -1,9 +1,15 @@
 import { LinearClient } from '@linear/sdk';
+import LogDehash from '@coredevices/logdehash';
+import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
 
 interface Env {
   LINEAR_API_KEY: string;
   TEAM_KEY: string;
   ASSIGNEE_USERNAME: string;  // Linear username/slug
+  LOG_HASH_BUCKET_ENDPOINT: string;  // e.g., "https://s3.example.com"
+  LOG_HASH_BUCKET_KEY_ID: string;  // AWS S3 (or compatible) access key ID
+  LOG_HASH_BUCKET_SECRET: string;  // AWS S3 secret access key
+  LOG_HASH_BUCKET_NAME: string;  // Name of the S3 bucket containing log hash dictionaries
 }
 
 interface BugReport {
@@ -16,7 +22,129 @@ interface BugReport {
   attachments?: File[];
 }
 
+interface BucketConfig {
+  endpoint: string;
+  keyId: string;
+  secret: string;
+  bucketName: string;
+}
+
 const MAX_FILE_SIZE = 9.9 * 1024 * 1024; // 9.9MB in bytes
+const BUILD_ID_REGEX = /Build ID: ([a-z0-9-]+)$/i;
+const GENERATION_REGEX = /^=== Generation: ([0-9]+) ===$/gm;
+
+async function getDictionary(buildId: string): Promise<Map<string, any>> {
+  if (!process.env.LOG_HASH_BUCKET_ENDPOINT || !process.env.LOG_HASH_BUCKET_KEY_ID || !process.env.LOG_HASH_BUCKET_SECRET) {
+    throw new Error('Log hash bucket environment variables are not set');
+  }
+  const s3Client = new S3Client({
+    endpoint: process.env.LOG_HASH_BUCKET_ENDPOINT || '',
+    credentials: {
+      accessKeyId: process.env.LOG_HASH_BUCKET_KEY_ID || '',
+      secretAccessKey: process.env.LOG_HASH_BUCKET_SECRET || ''
+    }
+  });
+  const bucketName = process.env.LOG_HASH_BUCKET_NAME;
+  if (!bucketName) {
+    throw new Error('LOG_HASH_BUCKET_NAME environment variable is not set');
+  }
+
+  const listCommand = new ListObjectsV2Command({
+    Bucket: bucketName
+  });
+  const listResponse = await s3Client.send(listCommand);
+  if (!listResponse.Contents || listResponse.Contents.length === 0) {
+    console.error('No objects found in bucket:', bucketName);
+    return new Map();
+  }
+  const matches = listResponse.Contents
+    .filter(item => item.Key?.startsWith(buildId.toLowerCase()))
+    .map(item => item.Key);
+  
+  if (matches.length === 0) {
+    console.error('No matching objects found for Build ID:', buildId);
+    return new Map();
+  }
+  const objectKey = matches[0];
+  console.error('Found matching object:', objectKey);
+  const getObjectCommand = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: objectKey
+  });
+  const getObjectResponse = await s3Client.send(getObjectCommand);
+  if (!getObjectResponse.Body) {
+    throw new Error(`Failed to get object ${objectKey} from bucket ${bucketName}`);
+  }
+  const json = JSON.parse(await getObjectResponse.Body.transformToString());
+  if (!json || typeof json !== 'object') {
+    throw new Error(`Invalid JSON format in object ${objectKey}`);
+  }
+  const dict = new Map<string, any>(Object.entries(json));
+  console.error(`Loaded dictionary with ${dict.size} entries`);
+  return dict;
+}
+
+function splitGenerations(logs: string): string[] {
+  const generations: string[] = [];
+  const lines = logs.split('\n');
+  let currentGeneration: string[] = [];
+  let currentGenerationNumber: number | null = null;
+  for (const line of lines) {
+    const match = line.match(GENERATION_REGEX);
+    if (match) {
+      if (currentGenerationNumber !== null) {
+        generations.push(currentGeneration.join('\n'));
+      }
+      currentGenerationNumber = parseInt(match[1], 10);
+      currentGeneration = [];
+      currentGeneration.push(line);
+    } else if (currentGenerationNumber !== null) {
+      currentGeneration.push(line);
+    } else {
+      console.warn('Line outside of generation:', line);
+    }
+  }
+  if (currentGeneration.length > 0) {
+    generations.push(currentGeneration.join('\n'));
+  }
+  console.error(`Found ${generations.length} generations in logs`);
+  return generations;
+}
+
+async function dehashLogs(bucketConfig: BucketConfig, logs: string): Promise<string> {
+  const generations = splitGenerations(logs);
+  const dictCache: Map<string, LogDehash> = new Map();
+  let output: string = "";
+  for (const generation of generations) {
+    const buildId = generation.match(BUILD_ID_REGEX)?.[1];
+    if (!buildId) {
+      console.error('No Build ID found in logs');
+      return logs; // Return original logs if no Build ID
+    } else {
+      console.error('Found Build ID:', buildId);
+    }
+    let logDehash;
+    if (dictCache.has(buildId)) {
+      console.error('Using cached dictionary for Build ID:', buildId);
+      logDehash = dictCache.get(buildId)!;
+    } else {
+      console.error('Loading dictionary for Build ID:', buildId);
+      const dict = await getDictionary(buildId);
+      if (dict.size === 0) {
+        console.error('No dictionary found for Build ID:', buildId);
+        return logs; // Return original logs if no dictionary
+      }
+      logDehash = new LogDehash([dict]);
+      dictCache.set(buildId, logDehash);
+    }
+    const dehashed = generation.split('\n').map(line => {
+      return logDehash.dehash(line);
+    }).join('\n');
+    output += dehashed + '\n';
+  }
+  console.error('Dehashed logs successfully');
+  return output;
+}
 
 async function uploadAttachment(apiKey: string, file: File): Promise<string> {
   console.error('Processing file:', {
@@ -31,7 +159,7 @@ async function uploadAttachment(apiKey: string, file: File): Promise<string> {
   }
 
   const linearClient = new LinearClient({ apiKey });
-  const uploadPayload = await linearClient.fileUpload(file.type, file.name, file.size);
+  let uploadPayload = await linearClient.fileUpload(file.type, file.name, file.size);
 
   if (!uploadPayload.success || !uploadPayload.uploadFile) {
     throw new Error("Failed to request upload URL");
@@ -82,7 +210,7 @@ async function uploadAttachment(apiKey: string, file: File): Promise<string> {
   }
 }
 
-async function formatIssueBody(bugReport: BugReport, apiKey: string): Promise<string> {
+async function formatIssueBody(bugReport: BugReport, apiKey: string, bucketConfig: BucketConfig): Promise<string> {
   const now = new Date();
   
   // UTC timestamp
@@ -125,7 +253,12 @@ ${bugReport.summary}
   // Add attachments section if there are any
   if (bugReport.attachments && bugReport.attachments.length > 0) {
     body += '\n\n### Attachments\n';
-    const uploadPromises = bugReport.attachments.map(file => uploadAttachment(apiKey, file));
+    const uploadPromises = bugReport.attachments.map( async file => {
+      const isWatchLogs = file.name.startsWith('watch-logs') && file.type === 'text/plain';
+      const dehashed = isWatchLogs ? await dehashLogs(bucketConfig, await file.text()) : null;
+      const uploadFile = dehashed ? new File([dehashed], file.name, { type: file.type }) : file;
+      return uploadAttachment(apiKey, uploadFile);
+    });
     const assetUrls = await Promise.all(uploadPromises);
     
     for (let i = 0; i < bugReport.attachments.length; i++) {
@@ -147,7 +280,14 @@ ${bugReport.latestLogs}
   return body;
 }
 
-async function createLinearIssue(apiKey: string, teamKey: string, assigneeUsername: string, bugReport: BugReport, files?: FormData) {
+async function createLinearIssue(
+  apiKey: string,
+  teamKey: string,
+  assigneeUsername: string,
+  bucketConfig: BucketConfig,
+  bugReport: BugReport,
+  files?: FormData
+) {
   // Use first 60 chars of bug report details as title
   const title = bugReport.bugReportDetails.slice(0, 60) + (bugReport.bugReportDetails.length > 60 ? '...' : '');
   // Process any file attachments
@@ -165,7 +305,7 @@ async function createLinearIssue(apiKey: string, teamKey: string, assigneeUserna
     }
   }
 
-  const description = await formatIssueBody(bugReport, apiKey);
+  const description = await formatIssueBody(bugReport, apiKey, bucketConfig);
   const linearClient = new LinearClient({ apiKey });
 
   // List all teams first
@@ -334,6 +474,9 @@ export default {
       if (!env.TEAM_KEY) {
         throw new Error('TEAM_KEY environment variable is not set');
       }
+      if (!env.LOG_HASH_BUCKET_ENDPOINT || !env.LOG_HASH_BUCKET_KEY_ID || !env.LOG_HASH_BUCKET_SECRET || !env.LOG_HASH_BUCKET_NAME) {
+        throw new Error('Log hash bucket environment variables are not set');
+      }
 
       console.error('Environment variables:', {
         ASSIGNEE_USERNAME: env.ASSIGNEE_USERNAME,
@@ -341,8 +484,22 @@ export default {
         LINEAR_API_KEY: env.LINEAR_API_KEY ? '[REDACTED]' : 'undefined'
       });
 
+      const bucketConfig: BucketConfig = {
+        endpoint: env.LOG_HASH_BUCKET_ENDPOINT,
+        keyId: env.LOG_HASH_BUCKET_KEY_ID,
+        secret: env.LOG_HASH_BUCKET_SECRET,
+        bucketName: env.LOG_HASH_BUCKET_NAME,
+      };
+
       // Create issue in Linear
-      const result = await createLinearIssue(env.LINEAR_API_KEY, env.TEAM_KEY, env.ASSIGNEE_USERNAME, bugReport, files);
+      const result = await createLinearIssue(
+        env.LINEAR_API_KEY,
+        env.TEAM_KEY,
+        env.ASSIGNEE_USERNAME,
+        bucketConfig,
+        bugReport,
+        files
+      );
 
       return new Response(JSON.stringify(result), {
         status: 201,
