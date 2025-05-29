@@ -34,9 +34,6 @@ const BUILD_ID_REGEX = /Build ID: ([a-z0-9]+)/i;
 const GENERATION_REGEX = /^=== Generation: ([0-9]+) ===$/gm;
 
 async function getDictionary(bucketConfig: BucketConfig, buildId: string): Promise<Map<string, any>> {
-  if (!process.env.LOG_HASH_BUCKET_ENDPOINT || !process.env.LOG_HASH_BUCKET_KEY_ID || !process.env.LOG_HASH_BUCKET_SECRET) {
-    throw new Error('Log hash bucket environment variables are not set');
-  }
   const s3Client = new S3Client({
     endpoint: bucketConfig.endpoint,
     credentials: {
