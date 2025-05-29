@@ -35,6 +35,7 @@ const GENERATION_REGEX = /^=== Generation: ([0-9]+) ===$/gm;
 
 async function getDictionary(bucketConfig: BucketConfig, buildId: string): Promise<Map<string, any>> {
   const s3Client = new S3Client({
+    region: 'us-east-1',
     endpoint: bucketConfig.endpoint,
     credentials: {
       accessKeyId: bucketConfig.keyId,
