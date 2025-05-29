@@ -113,7 +113,8 @@ async function dehashLogs(bucketConfig: BucketConfig, logs: string): Promise<str
     const buildId = generation.match(BUILD_ID_REGEX)?.[1];
     if (!buildId) {
       console.error('No Build ID found in generation %d', generation);
-      return logs; // Return original logs if no Build ID
+      output += generation + '\n'; // Keep original generation if no Build ID
+      continue;
     } else {
       console.error('Found Build ID:', buildId);
     }
@@ -126,7 +127,8 @@ async function dehashLogs(bucketConfig: BucketConfig, logs: string): Promise<str
       const dict = await getDictionary(bucketConfig, buildId);
       if (dict.size === 0) {
         console.error('No dictionary found for Build ID:', buildId);
-        return logs; // Return original logs if no dictionary
+        output += generation + '\n'; // Keep original generation if no dictionary
+        continue;
       }
       logDehash = new LogDehash([dict]);
       dictCache.set(buildId, logDehash);
@@ -250,7 +252,7 @@ ${bugReport.summary}
     const uploadPromises = bugReport.attachments.map( async file => {
       const isWatchLogs = file.name.startsWith('watch-logs') && file.type === 'text/plain';
       const dehashed = isWatchLogs ? await dehashLogs(bucketConfig, await file.text()) : null;
-      const uploadFile = dehashed ? new File([dehashed], file.name, { type: file.type }) : file;
+      const uploadFile = dehashed ? new File([dehashed], "dehashed-watch-logs.txt", { type: file.type }) : file;
       return uploadAttachment(apiKey, uploadFile);
     });
     const assetUrls = await Promise.all(uploadPromises);
