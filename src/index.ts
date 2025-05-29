@@ -30,7 +30,7 @@ interface BucketConfig {
 }
 
 const MAX_FILE_SIZE = 9.9 * 1024 * 1024; // 9.9MB in bytes
-const BUILD_ID_REGEX = /Build ID: ([a-z0-9-]+)$/i;
+const BUILD_ID_REGEX = /Build ID: ([a-z0-9]+)/i;
 const GENERATION_REGEX = /^=== Generation: ([0-9]+) ===$/gm;
 
 async function getDictionary(bucketConfig: BucketConfig, buildId: string): Promise<Map<string, any>> {
@@ -114,7 +114,7 @@ async function dehashLogs(bucketConfig: BucketConfig, logs: string): Promise<str
   for (const generation of generations) {
     const buildId = generation.match(BUILD_ID_REGEX)?.[1];
     if (!buildId) {
-      console.error('No Build ID found in logs');
+      console.error('No Build ID found in generation %d', generation);
       return logs; // Return original logs if no Build ID
     } else {
       console.error('Found Build ID:', buildId);
@@ -125,7 +125,7 @@ async function dehashLogs(bucketConfig: BucketConfig, logs: string): Promise<str
       logDehash = dictCache.get(buildId)!;
     } else {
       console.error('Loading dictionary for Build ID:', buildId);
-      const dict = await getDictionary(buildId);
+      const dict = await getDictionary(bucketConfig, buildId);
       if (dict.size === 0) {
         console.error('No dictionary found for Build ID:', buildId);
         return logs; // Return original logs if no dictionary
