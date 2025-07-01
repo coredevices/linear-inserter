@@ -1,6 +1,7 @@
 import { LinearClient } from '@linear/sdk';
 import LogDehash from '@coredevices/logdehash';
 import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { splitGenerations } from './utils.js';
 
 interface Env {
   LINEAR_API_KEY: string;
@@ -76,33 +77,6 @@ async function getDictionary(bucketConfig: BucketConfig, buildId: string): Promi
   const dict = new Map<string, any>(Object.entries(json));
   console.error(`Loaded dictionary with ${dict.size} entries`);
   return dict;
-}
-
-function splitGenerations(logs: string): string[] {
-  const generations: string[] = [];
-  const lines = logs.split('\n');
-  let currentGeneration: string[] = [];
-  let currentGenerationNumber: number | null = null;
-  for (const line of lines) {
-    const match = line.match(GENERATION_REGEX);
-    if (match) {
-      if (currentGenerationNumber !== null) {
-        generations.push(currentGeneration.join('\n'));
-      }
-      currentGenerationNumber = parseInt(match[1], 10);
-      currentGeneration = [];
-      currentGeneration.push(line);
-    } else if (currentGenerationNumber !== null) {
-      currentGeneration.push(line);
-    } else {
-      console.warn('Line outside of generation:', line);
-    }
-  }
-  if (currentGeneration.length > 0) {
-    generations.push(currentGeneration.join('\n'));
-  }
-  console.error(`Found ${generations.length} generations in logs`);
-  return generations;
 }
 
 async function dehashLogs(bucketConfig: BucketConfig, logs: string): Promise<string> {
