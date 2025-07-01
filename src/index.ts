@@ -52,8 +52,8 @@ async function getDictionary(bucketConfig: BucketConfig, buildId: string): Promi
     return new Map();
   }
   const matches = listResponse.Contents
-    .filter(item => item.Key?.startsWith(buildId.toLowerCase()))
-    .map(item => item.Key);
+    .filter((item: any) => item.Key?.startsWith(buildId.toLowerCase()))
+    .map((item: any) => item.Key);
   
   if (matches.length === 0) {
     console.error('No matching objects found for Build ID:', buildId);
