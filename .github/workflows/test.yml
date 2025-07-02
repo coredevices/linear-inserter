@@ -22,10 +22,16 @@ jobs:
           
       - name: Install dependencies
         run: |
-          # Only install devDependencies for testing
+          # Remove .npmrc to prevent private registry access
+          rm -f .npmrc
+          
+          # Only install packages needed for testing
           # The tests only use utils.ts which doesn't require production dependencies
-          # This avoids authentication issues with private packages like @coredevices/logdehash
-          npm install --omit=prod --ignore-scripts
+          npm install --no-save \
+            typescript@^5.5.2 \
+            vitest@2.1.8 \
+            @cloudflare/vitest-pool-workers@^0.6.4 \
+            @cloudflare/workers-types@^4.20250129.0
         
       - name: Run tests
         run: npm test -- --run
