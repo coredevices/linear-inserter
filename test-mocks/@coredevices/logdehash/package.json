@@ -1,0 +1,6 @@
+{
+  "name": "@coredevices/logdehash",
+  "version": "1.0.3",
+  "main": "index.js",
+  "description": "Mock for CI testing"
+}

@@ -25,13 +25,16 @@ jobs:
           # Remove .npmrc to prevent private registry access
           rm -f .npmrc
           
-          # Only install packages needed for testing
-          # The tests only use utils.ts which doesn't require production dependencies
+          # Install test dependencies
           npm install --no-save \
             typescript@^5.5.2 \
             vitest@2.1.8 \
             @cloudflare/vitest-pool-workers@^0.6.4 \
             @cloudflare/workers-types@^4.20250129.0
+          
+          # Create symlinks for mock packages to satisfy imports
+          mkdir -p node_modules/@coredevices
+          ln -sf ../../test-mocks/@coredevices/logdehash node_modules/@coredevices/logdehash
         
       - name: Run tests
         run: npm test -- --run
