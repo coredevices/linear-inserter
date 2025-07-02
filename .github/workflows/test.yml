@@ -21,7 +21,12 @@ jobs:
           cache: 'npm'
           
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # Create temporary npmrc to avoid private registry issues
+          echo "@coredevices:registry=https://registry.npmjs.org/" > .npmrc
+          echo "@linear:registry=https://registry.npmjs.org/" >> .npmrc
+          echo "@aws-sdk:registry=https://registry.npmjs.org/" >> .npmrc
+          npm ci --ignore-scripts || npm install --ignore-scripts
         
       - name: Run tests
         run: npm test -- --run
