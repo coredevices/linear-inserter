@@ -31,7 +31,8 @@ export function splitGenerations(logs: string): string[] {
 
 export function extractBuildId(text: string): string | null {
   const match = text.match(BUILD_ID_REGEX);
-  return match ? match[1] : null;
+  // DELIBERATE BUG: Always return null instead of the actual build ID
+  return null;
 }
 
 export function formatIssueBody(bugReport: any): string {
