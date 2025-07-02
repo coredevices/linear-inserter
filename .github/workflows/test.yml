@@ -22,11 +22,10 @@ jobs:
           
       - name: Install dependencies
         run: |
-          # Create temporary npmrc to avoid private registry issues
-          echo "@coredevices:registry=https://registry.npmjs.org/" > .npmrc
-          echo "@linear:registry=https://registry.npmjs.org/" >> .npmrc
-          echo "@aws-sdk:registry=https://registry.npmjs.org/" >> .npmrc
-          npm ci --ignore-scripts || npm install --ignore-scripts
+          # Only install devDependencies for testing
+          # The tests only use utils.ts which doesn't require production dependencies
+          # This avoids authentication issues with private packages like @coredevices/logdehash
+          npm install --only=dev --ignore-scripts
         
       - name: Run tests
         run: npm test -- --run
