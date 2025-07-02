@@ -25,7 +25,7 @@ jobs:
           # Only install devDependencies for testing
           # The tests only use utils.ts which doesn't require production dependencies
           # This avoids authentication issues with private packages like @coredevices/logdehash
-          npm install --only=dev --ignore-scripts
+          npm install --omit=prod --ignore-scripts
         
       - name: Run tests
         run: npm test -- --run
