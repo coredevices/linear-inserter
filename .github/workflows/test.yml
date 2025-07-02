@@ -22,17 +22,31 @@ jobs:
           
       - name: Install dependencies
         run: |
-          # Remove .npmrc to prevent private registry access
-          rm -f .npmrc
+          # Remove files that reference private packages
+          rm -f .npmrc package-lock.json
           
-          # Install test dependencies
-          npm install --no-save \
-            typescript@^5.5.2 \
-            vitest@2.1.8 \
-            @cloudflare/vitest-pool-workers@^0.6.4 \
-            @cloudflare/workers-types@^4.20250129.0
+          # Create minimal package.json for CI testing only
+          cat > package.json.ci << 'EOF'
+          {
+            "name": "linear-issue-creator-ci",
+            "private": true,
+            "scripts": {
+              "test": "vitest"
+            },
+            "devDependencies": {
+              "typescript": "^5.5.2",
+              "vitest": "2.1.8",
+              "@cloudflare/vitest-pool-workers": "^0.6.4",
+              "@cloudflare/workers-types": "^4.20250129.0"
+            }
+          }
+          EOF
           
-          # Create symlinks for mock packages to satisfy imports
+          # Use CI package.json and install only test dependencies
+          mv package.json.ci package.json
+          npm install
+          
+          # Create mock packages to satisfy imports
           mkdir -p node_modules/@coredevices
           ln -sf ../../test-mocks/@coredevices/logdehash node_modules/@coredevices/logdehash
         
